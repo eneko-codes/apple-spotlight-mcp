@@ -1,0 +1,62 @@
+{
+  "manifest_version": "0.3",
+  "name": "apple-spotlight-mcp",
+  "display_name": "Spotlight",
+  "version": "1.0.0",
+  "description": "Search files by name, content, kind or tag through Spotlight",
+  "long_description": "A local MCP server written in Swift for Spotlight search (NSMetadataQuery).\n\nSpotlight is the reason this is worth having: it searches content macOS has already indexed across the disk — inside PDFs, documents and source files — not just file names. spotlight_search matches on name, TEXT INSIDE THE FILE, kind, UTI, modification date range, size range and Finder tag, optionally scoped to one folder.\n\nEvery path is resolved through symlinks and \"..\" before it is checked against the configured folders, so a scope cannot be walked out of.\n\nThe folder list below is the ONE deliberate exception to \"nothing to configure\" in this family of extensions: it is the security boundary itself, not a preference, so there is no sensible default to hardcode in its place. Leaving it blank means searching nothing; guessing one would mean guessing what may be exposed.\n\nA path this server returns still has to pass whatever allow-list the tool that opens it enforces — apple-filesystem-mcp for a file's contents, apple-pdf-mcp for a PDF's text, apple-vision-mcp for OCR. Spotlight's index and a read allow-list are two separate checks.\n\nThis server never writes anything and has no delete of any kind.\n\nNot affiliated with or endorsed by Apple Inc.",
+  "author": {
+    "name": "eneko-codes",
+    "url": "https://github.com/eneko-codes"
+  },
+  "homepage": "https://github.com/eneko-codes/apple-spotlight-mcp",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eneko-codes/apple-spotlight-mcp"
+  },
+  "license": "MIT",
+  "icon": "icon.png",
+  "keywords": [
+    "spotlight",
+    "search",
+    "metadata",
+    "macos"
+  ],
+  "server": {
+    "type": "binary",
+    "entry_point": "server/apple-spotlight-mcp",
+    "mcp_config": {
+      "command": "${__dirname}/server/apple-spotlight-mcp",
+      "args": [
+        "--read-roots",
+        "${user_config.read_roots}"
+      ],
+      "env": {}
+    }
+  },
+  "tools": [
+    {
+      "name": "spotlight_status",
+      "description": "Reports which folders this server may search, whether macOS is actually letting it reach them, and whether Spotlight is answering for them. Reads no file contents."
+    },
+    {
+      "name": "spotlight_search",
+      "description": "Asks Spotlight for files matching any combination of: name, TEXT INSIDE THE FILE, kind, UTI, modification date range, size range and Finder tag — optionally under one folder. Returns one path per…"
+    }
+  ],
+  "user_config": {
+    "read_roots": {
+      "type": "directory",
+      "title": "Folders Claude may search",
+      "multiple": true,
+      "required": true,
+      "description": "Claude can search anything inside these. Nothing outside them is reachable."
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": [
+      "darwin"
+    ]
+  }
+}

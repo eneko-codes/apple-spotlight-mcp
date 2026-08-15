@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- CFBundleName is the label macOS shows in System Settings > Privacy & Security >
+	     Files and Folders. Keep it identical to the binary name so the toggle is
+	     recognisable. -->
+	<key>CFBundleName</key>
+	<string>apple-spotlight-mcp</string>
+	<key>CFBundleIdentifier</key>
+	<string>codes.eneko.apple-spotlight-mcp</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+
+	<!-- macOS gates the three home folders individually, each with its own key and its
+	     own switch under Files and Folders. A read root anywhere else — iCloud Drive, an
+	     external disk, ~/Code — is covered by Full Disk Access instead, which has no
+	     plist key at all and can only be granted by hand. Key names verified against the
+	     tccd binary on macOS 26.5; do not invent others. -->
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Lets Claude search files on your Desktop through this local MCP server.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Lets Claude search files in your Documents folder through this local MCP server.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Lets Claude search files in your Downloads folder through this local MCP server.</string>
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>Lets Claude search files on USB drives and other removable disks you have put in scope.</string>
+	<key>NSNetworkVolumesUsageDescription</key>
+	<string>Lets Claude search files on network shares you have put in scope.</string>
+</dict>
+</plist>
