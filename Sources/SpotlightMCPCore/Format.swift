@@ -137,12 +137,22 @@ public struct Format: Sendable {
         }
 
         if indexState != .responding {
+            let cause =
+                indexState == .timedOut
+                ? "took longer to answer than this check waits for"
+                : "returned nothing for these folders, at least within this check's own wait"
             text += """
 
 
-                Spotlight returned nothing for these folders (\(indexState.rawValue)), so
-                spotlight_search may be blind here — an unindexed volume or one excluded
-                in Spotlight's privacy list looks exactly like "no matches".
+                Spotlight \(cause) (\(indexState.rawValue)). That can mean an unindexed
+                volume or one excluded in Spotlight's privacy list — but this is a fast,
+                narrow canary query, not spotlight_search itself, and it has been caught
+                under-reporting a folder that a real search then answered correctly: a
+                fresh live query's first gathering pass does not always surface
+                everything immediately, especially for a broad "match everything"
+                predicate like this one. Treat this as a reason to double-check, never as
+                proof that spotlight_search will find nothing — try the real search
+                before concluding the folder is unreachable.
                 """
         }
         return text

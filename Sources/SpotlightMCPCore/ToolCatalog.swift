@@ -64,10 +64,14 @@ public enum ToolCatalog {
             letting it reach them, and whether Spotlight is answering for them. Reads no \
             file contents.
 
-            Call it first in any session that will search files, and again whenever \
-            spotlight_search returns nothing you expected: it separates "outside the \
-            configured scope" from "macOS refused" from "Spotlight has not indexed \
-            this", which are three different problems with three different fixes.
+            Call it first in any session that will search files: it separates "outside \
+            the configured scope" from "macOS refused" from "Spotlight looks slow or \
+            unresponsive right now", which are three different problems with three \
+            different fixes. That third check is a fast, narrow canary query, though, \
+            not spotlight_search itself — it has been observed under-reporting a folder \
+            that a real search then answered correctly. Treat a non-responding result \
+            here as a reason to double-check, never as proof that spotlight_search will \
+            find nothing: if a search comes back with real matches, believe the search.
             """,
         inputSchema: object(properties: [:]),
         annotations: .init(

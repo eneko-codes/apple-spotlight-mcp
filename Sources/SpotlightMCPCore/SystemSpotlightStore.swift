@@ -77,9 +77,19 @@ public struct SystemSpotlightStore: SpotlightStore {
     public func indexState(scopes: [String]) async -> IndexState {
         // Matches anything with a name, which is everything Spotlight has. The question
         // is whether the index answers for these folders at all, not what is in them.
+        //
+        // This deadline used to be 3.0s, a lot shorter than search()'s 20.0s — and that
+        // asymmetry is a real bug, caught in the field: a folder holding real, indexed,
+        // findable content still reported `.empty` here, because "enumerate everything"
+        // is a broader, slower gathering pass for NSMetadataQuery to complete than a
+        // narrow indexed lookup like search()'s is, and 3 seconds was not always enough
+        // for it to finish honestly. Matching search()'s deadline is the direct fix for
+        // that asymmetry; Format still tells the caller this remains a coarse canary
+        // rather than proof, because a fresh live query can under-report on its first
+        // gathering pass for reasons this deadline alone does not rule out.
         let outcome = await SpotlightRunner.gather(
             predicate: NSPredicate(format: "%K LIKE %@", NSMetadataItemFSNameKey, "*"),
-            scopes: scopes, sortDescriptors: [], offset: 0, limit: 1, deadline: 3.0)
+            scopes: scopes, sortDescriptors: [], offset: 0, limit: 1, deadline: 20.0)
         if outcome.timedOut { return .timedOut }
         return outcome.total > 0 ? .responding : .empty
     }
