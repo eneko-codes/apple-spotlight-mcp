@@ -137,3 +137,23 @@ root that is configured but never reached will not prompt, which is why
 **A linker-signed binary gets no TCC prompt at all.** `pack.sh` re-signs and prints the
 designated requirement; an empty line there means the build is broken in a way nothing
 else will show.
+
+## MCP servers
+
+Applies to any repository shipping an MCP server or Claude extension: an `initialize` handler, a tool catalogue, or a manifest packed into a `.mcpb`.
+
+**Shipping a rebuild**
+
+- **ALWAYS bump the version before packing.** The installer keys on the manifest `version` alone, so a changed build under an already-installed version offers only "Uninstall" — which removes the extension instead of updating it.
+- **Three files carry the version and must agree:** the manifest `version`, the server's own version constant (what `initialize` and the status tool report), and `CFBundleShortVersionString` in `Resources/Info.plist`. A test asserts all three; keep it.
+- **Installing does not restart the server.** The running process serves the old binary until the client is fully quit and reopened, so a fix can appear to fail while the old code is still answering. Verify what is actually running (`ps`, and the binary path the status tool prints) before trusting any result, and ask for a full restart, not just an install.
+- **Ad-hoc signing changes the cdhash on every rebuild**, so TCC forgets its grant and prompts again. Expected, not a fault — say so on handover.
+
+**Documentation the model reads**
+
+The server documents itself to a model, which acts on that text and cannot detect that it is wrong. Treat it as code, not prose.
+
+- Update it in the same commit as the behaviour: a new, renamed or removed tool; a change to what a tool does, refuses, defaults to or requires; a change in which permission governs what; a limitation callers must work around.
+- Four surfaces, all natural language: the server `instructions`, each tool `description`, each argument `description`, and the manifest's `tools` array and `long_description`. The manifest is read before the server has ever run, so a tool missing from it has no permission switch at all.
+- State what the schema cannot convey: which tool to call first, which identifiers go stale and why, what cannot be undone, which permission governs what, and which field to prefer when several would fit.
+- None of it takes effect until the client restarts. Say so on handover.
