@@ -44,6 +44,12 @@ named in the question you asked, it has to have a way back, and you have to say 
 you are on and why the gentler ones cannot answer it. Whatever you created, remove in the
 same session.
 
+**`$TMPDIR` is the wrong fixture home here, unusually.** Spotlight does not index temporary
+directories the way it indexes the owner's own folders, so a file placed there can return no
+match at all — and that emptiness reads as a broken query rather than as an unindexed path.
+If a check genuinely needs an indexed location, that is live data: ask first, under the rule
+above.
+
 ## What this is
 
 A local MCP server (Swift 6, stdio transport) for Spotlight search: name, content, kind, UTI, date range, size range and Finder tag, through `NSMetadataQuery`. No Finder, no Apple events, no network, no write of any kind.
