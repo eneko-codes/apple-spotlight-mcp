@@ -11,12 +11,6 @@ No Finder, no Apple events, no network. Everything is a direct `NSMetadataQuery`
 gated by one allow-list of folders chosen when the extension is installed. Nothing
 outside it is reachable, by any tool.
 
-This server is one of a 4-way split of what used to be `apple-filesystem-mcp`'s combined
-FileManager + Spotlight + PDFKit + Vision surface. Its siblings are
-[apple-filesystem-mcp](https://github.com/eneko-codes/apple-filesystem-mcp) (files),
-[apple-pdf-mcp](https://github.com/eneko-codes/apple-pdf-mcp) (PDF text/outline/metadata)
-and [apple-vision-mcp](https://github.com/eneko-codes/apple-vision-mcp) (OCR).
-
 Not affiliated with or endorsed by Apple Inc.
 
 ## Requirements
@@ -33,6 +27,19 @@ Not affiliated with or endorsed by Apple Inc.
 | `spotlight_status` | read | Reports the read scope, whether macOS is actually letting this process reach it, and whether Spotlight is answering for it. Reads no file contents. |
 | `spotlight_search` | read | Asks Spotlight for files matching name, text inside the file, kind, UTI, date range, size range or Finder tag, optionally under one folder. |
 
+## Frameworks and APIs
+
+| Used | For | Reference |
+|---|---|---|
+| Foundation `NSMetadataQuery`, `NSMetadataItem` | Every search — this is the Spotlight API | [NSMetadataQuery](https://developer.apple.com/documentation/foundation/nsmetadataquery) |
+| `NSMetadataItem*Key` constants — path, name, size, content-change date, kind, text content | Predicates and returned rows | [File Metadata Attributes](https://developer.apple.com/documentation/coreservices/file_metadata) |
+| `NSPredicate`, `NSCompoundPredicate`, `NSSortDescriptor` | Building the query | [NSPredicate](https://developer.apple.com/documentation/foundation/nspredicate) |
+| Foundation `FileManager` | Scope checks only | [FileManager](https://developer.apple.com/documentation/foundation/filemanager) |
+
+The older `MDQuery`/`MDItem` C API is not used, and neither is any write API — Spotlight
+offers no way to write, and this server adds none. Note that `NSMetadataQuery` answers from
+the index: a file macOS has not indexed is invisible here however plainly it exists.
+
 ## The rules worth knowing before you use it
 
 **Canonicalise first, then compare — the order is not negotiable.** Every path is
@@ -46,12 +53,8 @@ never mistaken for something inside `Documents`.
 
 **Spotlight and a read allow-list are two separate checks.** `spotlight_search` answers
 from Spotlight's own index, which has already read the contents of everything it
-indexed — but a path it returns still has to pass whatever allow-list the tool that
-opens it enforces:
-[apple-filesystem-mcp](https://github.com/eneko-codes/apple-filesystem-mcp) for a file's
-contents, [apple-pdf-mcp](https://github.com/eneko-codes/apple-pdf-mcp) for a PDF's
-text, [apple-vision-mcp](https://github.com/eneko-codes/apple-vision-mcp) for OCR.
-Finding a path here never means it is readable elsewhere.
+indexed — but a path it returns still has to pass whatever allow-list the tool
+that opens it enforces. Finding a path here never means it is readable elsewhere.
 
 **Spotlight can stall indefinitely** on an unindexed or network volume. Every query
 carries a deadline and reports when it was hit — an empty result and a timed-out query
@@ -89,8 +92,8 @@ running, and the old one keeps answering.
 
 ### 3. Configure the read scope
 
-Like its siblings, this server is the deliberate exception to "nothing to configure" in
-this family of extensions: `read_roots` is not a preference with a sensible default, it
+This server is the deliberate exception to "nothing to configure":
+`read_roots` is not a preference with a sensible default, it
 is the security boundary itself. In Claude Desktop → Settings → Extensions → Spotlight,
 set **Folders Claude may search** — Claude can find anything inside these; nothing
 outside them is reachable at all. There is no hardcoded fallback like `~/Documents` — an
@@ -179,8 +182,10 @@ since there is no `user_config` to fill it in for you.
   exists.
 - **There is no "recent files" tool**, by design. Sorting by `modified` descending with
   no other filter is how you ask for recent work instead.
-- **Finding a path here does not make it readable elsewhere.** Spotlight's index and a
-  read allow-list are two separate checks, enforced by two different servers.
+- **Finding a path here does not make it readable elsewhere.** Spotlight's index and a read
+  allow-list are two separate checks.
+- **`sort` is advertised but not honoured.** The tool schema offers `modified`, `created`,
+  `name` and `size`; results always come back by modification date, newest first.
 
 ## Development
 
@@ -195,8 +200,7 @@ accidentally reached a real file or a live Spotlight index fails loudly rather t
 quietly passing. See `CLAUDE.md`, whose first section is the hard rule that makes that
 non-negotiable: no agent working in this repository may touch a file outside it.
 
-Manual verification against real files is the owner's job, by hand, with MCP Inspector;
-`verification.md` is the script for it.
+Manual verification against real files is the owner's job, by hand, with MCP Inspector.
 
 ## Licence
 
