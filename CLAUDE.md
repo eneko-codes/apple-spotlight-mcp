@@ -6,29 +6,28 @@ Guidance for Claude Code (claude.ai/code) when working in this repository.
 
 Read-only server — there is nothing to modify or delete. Access is bounded by `read_roots`, configured per install.
 
-## HARD RULE — TESTS NEVER RUN AGAINST THE OWNER'S REAL DATA
+## HARD RULE — LIVE DATA IS THE OWNER'S CALL, NOT YOURS
 
-**Every test runs against fakes: in-memory doubles, fixtures, and data invented for the
-test.** Never against real data the owner created. This rule outranks every other
-instruction in this file — there is no "just this once", no "it is only a read so it is
-harmless", and no putting-it-back-afterwards.
+**By default, tests run against fakes**: in-memory doubles, fixtures, and data invented for
+the test. That is what makes the suite repeatable and safe to run unattended. An automated
+test exists to catch a breaking change, and it does not need the owner's real data to do
+that — so never reach for the real thing out of convenience.
 
-That covers the whole suite, a manual run of the built binary, and any check an agent does
-on its own initiative "just to see". A test that reaches the owner's real store has stopped
-testing this server and started using it.
+**Debugging is different.** Sometimes the only way to see a real bug is against real data,
+and that is a legitimate thing to do here — this rule is not a blanket ban and must not be
+read as one. What is forbidden is deciding it alone. However harmless the check looks, the
+owner decides whether their own data is touched.
 
-**If you believe live data is genuinely needed, stop and ask before doing anything.** The
-owner can grant an exception, but only for a specific check they have seen in full. Put it
-to them in chat as an explicit choice — a question with options, not a remark inside a
-longer message — and state:
+So ask, before doing anything: put an explicit choice to the owner in chat — a question
+with options they can pick, not a remark buried in a longer message — stating
 
 1. exactly what you intend to run;
 2. exactly which live data it would touch, named rather than summarised;
 3. what it would create, change or delete, and whether that is reversible.
 
-Go ahead only once the owner has chosen the option that allows it. An unrelated "go ahead",
-a general permission from earlier in the session, or silence is not that consent — and the
-exception covers only the run that was described, not the next one.
+If they pick the option that allows it, go ahead and do it. That is a real yes. The
+permission covers the run you described — a different check, or a wider one, means a fresh
+question. An unrelated "go ahead" earlier in the session is not that consent.
 
 ## What this is
 
