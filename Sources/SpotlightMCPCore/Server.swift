@@ -4,7 +4,7 @@ import MCP
 public enum SpotlightMCPServer {
 
     public static let name = "apple-spotlight-mcp"
-    public static let version = "1.0.0"
+    public static let version = "1.0.1"
 
     /// Returned from `initialize`. It carries what per-tool descriptions cannot state
     /// once: the allow-list, and the fact that Spotlight and the allow-list are two
@@ -18,7 +18,10 @@ public enum SpotlightMCPServer {
         symlinks followed — and then checked against that list before anything happens. \
         A path outside it is refused and the error names the configured scope. Call \
         spotlight_status first: it reports the list, whether macOS is actually letting \
-        this process reach it, and whether Spotlight is answering.
+        this process reach it, and whether Spotlight is answering — though that last \
+        check is a fast, coarse canary, not spotlight_search itself, and it can \
+        under-report. A real search's own result always outweighs it: if \
+        spotlight_search returns matches, trust them even after a discouraging status.
 
         spotlight_search asks Spotlight, which has already read the contents of \
         everything it indexed — 'text_contains' is the reason to use this at all: it \

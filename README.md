@@ -63,7 +63,10 @@ are two different answers, and the tool never confuses them.
 **A folder Spotlight has not indexed is invisible here however plainly it exists.** An
 excluded volume, a network share, or something written seconds ago will not show up in
 `spotlight_search` no matter how correct the filter is. `spotlight_status` reports
-whether the index is answering at all for the configured folders.
+whether the index is answering at all for the configured folders — but that check is a
+fast, narrow canary (a broad "match everything" query), not `spotlight_search` itself,
+and it has been observed under-reporting a folder that a real search then answered
+correctly. A real `spotlight_search` result always outweighs a discouraging status.
 
 **This server has no write of any kind.** It only ever searches and reads metadata.
 
