@@ -43,4 +43,19 @@ struct DiagnosticsTests {
         #expect(line.filter { $0 == "\n" }.count == 1)
         #expect(line.hasSuffix("stopped\n"))
     }
+
+    @Test("Every line names the process that wrote it, so two instances can be told apart")
+    func lineCarriesProcessID() {
+        let first = Diagnostics.line("info", "stopped", processID: 4242)
+        let second = Diagnostics.line("info", "stopped", processID: 4243)
+        #expect(first.contains("[4242] stopped"))
+        #expect(second.contains("[4243] stopped"))
+        #expect(first != second)
+    }
+
+    @Test("The default process id is this process")
+    func defaultProcessID() {
+        let line = Diagnostics.line("info", "stopped")
+        #expect(line.contains("[\(ProcessInfo.processInfo.processIdentifier)]"))
+    }
 }
