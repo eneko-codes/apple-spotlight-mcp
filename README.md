@@ -78,7 +78,7 @@ correctly. A real `spotlight_search` result always outweighs a discouraging stat
 MCPB_SIGN_IDENTITY="Apple Development: Your Name (TEAMID)" ./scripts/pack.sh
 ```
 
-That builds a universal (arm64 + x86_64) release binary, signs it, checks the embedded
+That builds an arm64 (Apple silicon only) release binary, signs it, checks the embedded
 `Info.plist` survived both linking and signing, prints the designated requirement, and
 writes `dist/apple-spotlight-mcp.mcpb`. It fails loudly rather than shipping a bundle
 that would silently refuse to work.

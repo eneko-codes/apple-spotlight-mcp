@@ -9,14 +9,19 @@ NAME="apple-spotlight-mcp"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-# Universal, so the bundle also runs on an Intel Mac. Drop the second --arch for a
-# faster local build.
-echo "==> Building $NAME (universal)"
-swift build -c release --arch arm64 --arch x86_64
+# Apple silicon only. A universal build (--arch arm64 --arch x86_64) doubles the bundle
+# and takes ~70x longer to link, and macOS 26 is the end of the road for Intel anyway.
+echo "==> Building $NAME (arm64)"
+swift build -c release
 
-BINARY=".build/apple/Products/Release/$NAME"
-[ -f "$BINARY" ] || BINARY=".build/release/$NAME"
+BINARY=".build/release/$NAME"
 [ -f "$BINARY" ] || { echo "!! no release binary found" >&2; exit 1; }
+
+# GUARD: Apple silicon only. A stray extra architecture would otherwise ship without
+# any error.
+ARCHS="$(lipo -archs "$BINARY")"
+[ "$ARCHS" = "arm64" ] \
+  || { echo "!! expected arm64 only, got: $ARCHS" >&2; exit 1; }
 
 # The embedded Info.plist is what makes this binary its own TCC subject. Without it
 # macOS denies access with no prompt, which is a confusing failure to debug later.
