@@ -14,23 +14,15 @@ public enum Diagnostics {
         emit("info", "started version=\(version)")
     }
 
-    static func stopped() {
-        emit("info", "stopped")
-    }
-
     /// For the failure that ends the process. Exit status alone cannot say why.
     public static func fatal(_ error: Error) {
         emit("fatal", "exiting error=\(kind(of: error))")
     }
 
-    static func toolCompleted(_ name: String, since start: ContinuousClock.Instant) {
-        emit("info", "tool=\(toolName(name)) outcome=ok ms=\(milliseconds(since: start))")
-    }
-
     static func toolFailed(_ name: String, error: Error, since start: ContinuousClock.Instant) {
         emit(
             "error",
-            "tool=\(toolName(name)) outcome=failed error=\(kind(of: error)) ms=\(milliseconds(since: start))"
+            "tool=\(toolName(name)) failed error=\(kind(of: error)) ms=\(milliseconds(since: start))"
         )
     }
 
