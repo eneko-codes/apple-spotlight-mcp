@@ -47,3 +47,7 @@ otool -P .build/release/apple-spotlight-mcp | grep UsageDescription
 **Apple silicon only, deliberately.** `scripts/pack.sh` builds for arm64 alone — a plain `swift build -c release`, no `--arch` flags — and fails if the binary
 holds any other architecture. A universal build doubles the bundle for an architecture
 macOS 26 is the last release to support. Do not add an x86_64 slice back.
+
+## Diagnostics
+
+Logs go to stderr through `Diagnostics`, which the host captures (Claude Desktop writes it to `~/Library/Logs/Claude/mcp-server-<name>.log`). stdout is the JSON-RPC stream: never `print`. The API takes no free-form text on purpose. Do not add one, and do not log an argument, a result, an error's `localizedDescription` or an identifier; log a fixed event, the tool name, the error's kind and a duration.
