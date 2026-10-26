@@ -65,8 +65,8 @@ public struct PathScope: Sendable {
 
     /// True when `candidate` is the root itself or lies underneath it.
     ///
-    /// The separator in the prefix is what stops `/Users/eneko/Documents-old` from
-    /// matching the root `/Users/eneko/Documents`. A bare `hasPrefix` is the classic way
+    /// The separator in the prefix is what stops `/Users/user/Documents-old` from
+    /// matching the root `/Users/user/Documents`. A bare `hasPrefix` is the classic way
     /// this check is got wrong.
     static func contains(root: String, candidate: String) -> Bool {
         if candidate == root { return true }
