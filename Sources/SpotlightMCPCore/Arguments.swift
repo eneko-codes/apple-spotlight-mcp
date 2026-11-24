@@ -1,5 +1,4 @@
 import Foundation
-import MCP
 
 /// Typed access to a `tools/call` argument bag.
 public struct Arguments {
