@@ -139,23 +139,86 @@ public struct MCPHandler: Sendable {
 }
 
 /// Reads requests until the input ends, answering each on its own task so a slow or stuck
-/// call never holds up the ones behind it. Returns once every answer has been written.
+/// call never holds up the ones behind it.
+///
+/// Closing the input is how a client shuts a stdio server down: the specification has it
+/// wait for the process to exit, then send SIGTERM. So the end of input waits at most
+/// `grace` for calls still running, long enough for a quick one to be answered, and then
+/// returns so the process can exit and clean up, even while a call is stuck. A call still
+/// running then is abandoned, its answer never written.
 public func serve<Lines: AsyncSequence>(
-    lines: Lines, handler: MCPHandler, write: @escaping @Sendable (String) -> Void
+    lines: Lines, handler: MCPHandler, write: @escaping @Sendable (String) -> Void,
+    grace: Duration = .seconds(2)
 ) async where Lines.Element == String {
-    await withTaskGroup(of: Void.self) { group in
-        do {
-            for try await line in lines {
-                guard !line.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
-                group.addTask {
-                    if let reply = await handler.respond(to: line) { write(reply) }
-                }
+    // Unstructured tasks, not a task group: a group cannot be left before every child has
+    // finished, and a stuck call would keep the server alive.
+    let calls = CallsInFlight()
+    do {
+        for try await line in lines {
+            guard !line.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
+            calls.started()
+            Task {
+                if let reply = await handler.respond(to: line) { write(reply) }
+                calls.finished()
             }
-        } catch {
-            // A read error ends the input like end of file does; what was asked is still
-            // answered below.
         }
-        await group.waitForAll()
+    } catch {
+        // A read error ends the input like end of file does.
+    }
+    await calls.drain(within: grace)
+}
+
+/// Counts the calls `serve` has started and not finished, so the end of input can wait for
+/// them to reach zero, for a bounded time.
+private final class CallsInFlight: Sendable {
+
+    private struct State {
+        var running = 0
+        var waiter: CheckedContinuation<Void, Never>?
+    }
+
+    private let state = Mutex(State())
+
+    func started() {
+        state.withLock { $0.running += 1 }
+    }
+
+    func finished() {
+        let waiter = state.withLock { state -> CheckedContinuation<Void, Never>? in
+            state.running -= 1
+            guard state.running == 0 else { return nil }
+            defer { state.waiter = nil }
+            return state.waiter
+        }
+        waiter?.resume()
+    }
+
+    /// Returns when no call is running or `grace` has passed, whichever comes first. Whoever
+    /// takes the waiter out under the lock resumes it, so it is resumed exactly once.
+    ///
+    /// The timer is a dispatch timer, not `Task.sleep`: a call stuck in a synchronous system
+    /// call holds a thread of the cooperative pool, and enough of them could starve a timer
+    /// that needs one.
+    func drain(within grace: Duration) async {
+        let seconds = Double(grace.components.seconds) + Double(grace.components.attoseconds) / 1e18
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let idle = state.withLock { state -> Bool in
+                if state.running == 0 { return true }
+                state.waiter = continuation
+                return false
+            }
+            if idle {
+                continuation.resume()
+                return
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + seconds) {
+                let waiter = self.state.withLock { state -> CheckedContinuation<Void, Never>? in
+                    defer { state.waiter = nil }
+                    return state.waiter
+                }
+                waiter?.resume()
+            }
+        }
     }
 }
 

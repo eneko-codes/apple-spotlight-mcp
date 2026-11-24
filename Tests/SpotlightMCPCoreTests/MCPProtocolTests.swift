@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 
 @testable import SpotlightMCPCore
@@ -11,6 +12,9 @@ struct MCPProtocolTests {
     /// Answers every call with what it was asked, so a test can see what reached the tool.
     private struct EchoTools: ToolHandler {
         func handle(_ call: ToolCall) async -> ToolOutput {
+            if call.name == "stuck" {
+                try? await Task.sleep(for: .seconds(60))
+            }
             if call.name == "picture" {
                 return ToolOutput(
                     content: [.text("a picture"), .image(data: "AAAA", mimeType: "image/png")],
@@ -149,5 +153,44 @@ struct MCPProtocolTests {
         let name = "x"
         let interpolated: Value = "\(name)y"
         #expect(interpolated == .string("xy"))
+    }
+
+    // MARK: Serving
+
+    /// Feeds `lines` as the whole input and collects every line written.
+    private func served(_ lines: [String], grace: Duration) async -> (written: [String], elapsed: Duration) {
+        let written = Mutex<[String]>([])
+        let input = AsyncStream<String> { continuation in
+            for line in lines { continuation.yield(line) }
+            continuation.finish()
+        }
+        let started = ContinuousClock.now
+        await serve(
+            lines: input, handler: handler, write: { line in written.withLock { $0.append(line) } },
+            grace: grace)
+        return (written.withLock { $0 }, ContinuousClock.now - started)
+    }
+
+    @Test("calls already running when the input ends are still answered")
+    func endOfInputAnswersQuickCalls() async {
+        let outcome = await served(
+            [
+                #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#,
+                #"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
+                #"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo"}}"#,
+            ], grace: .seconds(5))
+        #expect(outcome.written.count == 2)
+        #expect(outcome.elapsed < .seconds(5))
+    }
+
+    @Test("a stuck call does not keep the server alive after the input ends")
+    func endOfInputAbandonsStuckCalls() async {
+        let outcome = await served(
+            [
+                #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"stuck"}}"#,
+                #"{"jsonrpc":"2.0","id":2,"method":"ping"}"#,
+            ], grace: .milliseconds(200))
+        #expect(outcome.written.count == 1)
+        #expect(outcome.elapsed < .seconds(5))
     }
 }
