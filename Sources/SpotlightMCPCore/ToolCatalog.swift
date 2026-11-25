@@ -1,5 +1,4 @@
 import Foundation
-import MCP
 
 /// The catalogue is the authorisation surface: a tool that is not listed here cannot be
 /// called, and the name it is listed under is the label on the permission switch in

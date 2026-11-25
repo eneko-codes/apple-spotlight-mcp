@@ -14,11 +14,6 @@ public enum Diagnostics {
         emit("info", "started version=\(version)")
     }
 
-    /// For the failure that ends the process. Exit status alone cannot say why.
-    public static func fatal(_ error: Error) {
-        emit("fatal", "exiting error=\(kind(of: error))")
-    }
-
     static func toolFailed(_ name: String, error: Error, since start: ContinuousClock.Instant) {
         emit(
             "error",
