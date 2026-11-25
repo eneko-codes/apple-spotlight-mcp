@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// The limits of the MCP tool standard this server follows, and the helpers that keep a
 /// tool inside them.
@@ -121,6 +122,7 @@ public enum Notice {
     public static func page(offset: Int, count: Int, total: Int?, things: String) -> String? {
         let last = offset + count
         guard let total else {
+            guard count > 0 else { return "Showing 0 \(things): offset=\(offset) is past the end. That is all." }
             return "Showing \(offset + 1)–\(last) \(things); more exist. Pass offset=\(last) for the next page."
         }
         guard offset > 0 || last < total else { return nil }
@@ -168,6 +170,25 @@ public enum Notice {
     /// For a number moved into its range.
     public static func adjusted(argument: String, asked: Int, range: ClosedRange<Int>, used: Int) -> String {
         "\(argument)=\(asked) is outside \(range.lowerBound)–\(range.upperBound); \(used) was used."
+    }
+
+    /// For a fractional number moved into its range, such as a scale.
+    public static func adjusted(argument: String, asked: Double, range: ClosedRange<Double>, used: Double) -> String {
+        "\(argument)=\(asked) is outside \(range.lowerBound)–\(range.upperBound); \(used) was used."
+    }
+
+    /// For a range of pages of one document. Returns `nil` when the range is the whole
+    /// document.
+    public static func pages(first: Int, last: Int, total: Int) -> String? {
+        guard first > 1 || last < total else { return nil }
+        let shown = "Pages \(first)–\(last) of \(total)."
+        return last < total ? "\(shown) Pass first_page=\(last + 1) for the next pages." : "\(shown) That is all."
+    }
+
+    /// For text cut where no call can return the rest: the receipt of something just
+    /// deleted, or another program's output that cannot be asked for twice.
+    public static func cutForGood(limit: Int, total: Int) -> String {
+        "Cut at \(limit) of \(total) characters; the rest cannot be read again."
     }
 
     /// For a result the guard had to cut.
@@ -218,7 +239,51 @@ extension ToolOutput {
     private static func cut(_ text: String, to room: Int) -> String {
         let units = text.utf16
         var head = String(units.prefix(room)) ?? String(units.prefix(room - 1)) ?? ""
-        if let lineBreak = head.lastIndex(of: "\n") { head = String(head[..<lineBreak]) }
+        // `isNewline`, not `"\n"`: a CRLF pair is one Character and would not match.
+        if let lineBreak = head.lastIndex(where: \.isNewline) { head = String(head[..<lineBreak]) }
         return head
+    }
+}
+
+/// Returns the first of two outcomes: the work finishing, or the limit passing.
+///
+/// The timer is a dispatch timer, not a `Task.sleep`, and the work is not a child of a task
+/// group. A synchronous call that never returns holds its thread and cannot be cancelled,
+/// and a task group would wait for it forever; a timer on the cooperative pool could be
+/// starved by the same stuck threads. The stuck work is abandoned, not stopped: its late
+/// result is discarded, and whatever it was doing may still happen.
+enum Deadline {
+
+    private final class Outcome<Value: Sendable>: Sendable {
+        private let continuation: Mutex<CheckedContinuation<Value?, Never>?>
+
+        init(_ continuation: CheckedContinuation<Value?, Never>) {
+            self.continuation = Mutex(continuation)
+        }
+
+        /// Only the first caller resumes; the other finds it empty.
+        func resume(returning value: Value?) {
+            continuation.withLock { pending in
+                pending?.resume(returning: value)
+                pending = nil
+            }
+        }
+    }
+
+    /// `nil` when `limit` passed before `work` finished.
+    static func run<Value: Sendable>(
+        within limit: Duration, _ work: @escaping @Sendable () async -> Value
+    ) async -> Value? {
+        let seconds = Double(limit.components.seconds) + Double(limit.components.attoseconds) / 1e18
+        return await withCheckedContinuation { continuation in
+            let outcome = Outcome<Value>(continuation)
+            let task = Task {
+                outcome.resume(returning: await work())
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + seconds) {
+                outcome.resume(returning: nil)
+                task.cancel()
+            }
+        }
     }
 }

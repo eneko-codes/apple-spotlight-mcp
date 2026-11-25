@@ -23,6 +23,9 @@ struct ToolStandardTests {
         #expect(
             Notice.page(offset: 50, count: 50, total: nil, things: "rows")
                 == "Showing 51–100 rows; more exist. Pass offset=100 for the next page.")
+        #expect(
+            Notice.page(offset: 900, count: 0, total: nil, things: "rows")
+                == "Showing 0 rows: offset=900 is past the end. That is all.")
     }
 
     @Test("The other notices keep their fixed wording")
@@ -43,6 +46,43 @@ struct ToolStandardTests {
         #expect(
             Notice.notShown(count: 12, things: "idle interfaces", pass: "include_inactive=true")
                 == "12 idle interfaces are not shown. Pass include_inactive=true to include them.")
+    }
+
+    @Test("The forms added after the first servers keep their wording")
+    func laterNotices() {
+        #expect(Notice.pages(first: 1, last: 40, total: 40) == nil)
+        #expect(Notice.pages(first: 1, last: 3, total: 40) == "Pages 1–3 of 40. Pass first_page=4 for the next pages.")
+        #expect(Notice.pages(first: 38, last: 40, total: 40) == "Pages 38–40 of 40. That is all.")
+        #expect(
+            Notice.cutForGood(limit: 2_000, total: 9_000)
+                == "Cut at 2000 of 9000 characters; the rest cannot be read again.")
+        #expect(
+            Notice.adjusted(argument: "scale", asked: 12.5, range: 0.1...8.0, used: 8.0)
+                == "scale=12.5 is outside 0.1–8.0; 8.0 was used.")
+    }
+
+    @Test("A CRLF text is cut at its last line break, like an LF one")
+    func guardCutsCRLF() {
+        let line = String(repeating: "y", count: 998) + "\r\n"
+        let cut = ToolOutput(text: String(repeating: line, count: 60), isError: false).withinTheStandard()
+        guard case .text(let body) = cut.content[1] else {
+            Issue.record("expected the cut text")
+            return
+        }
+        #expect(body.hasSuffix("y"))
+        #expect((body.utf16.count + 2) % 1000 == 0)
+    }
+
+    @Test("A deadline answers with the work's result, or with nothing once it passes")
+    func deadline() async {
+        #expect(await Deadline.run(within: .seconds(5)) { 42 } == 42)
+        // The work outlasts the limit by far, so a machine too busy to fire the timer on
+        // time still sees the limit pass first.
+        let late = await Deadline.run(within: .milliseconds(200)) { () -> Int in
+            try? await Task.sleep(for: .seconds(60))
+            return 1
+        }
+        #expect(late == nil)
     }
 
     @Test("Notices go before the data, and none means the data alone")
