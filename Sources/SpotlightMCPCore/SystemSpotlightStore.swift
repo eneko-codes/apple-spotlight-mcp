@@ -31,7 +31,7 @@ public struct SystemSpotlightStore: SpotlightStore {
         guard expanded.hasPrefix("/") else {
             throw ToolError.badArgument(
                 name: "path",
-                reason: "'\(path)' is not absolute. Give a full path, or one starting with ~")
+                reason: "'\(ToolStandard.echo(path))' is not absolute. Give a full path, or one starting with ~")
         }
 
         let standardised = URL(fileURLWithPath: expanded).standardizedFileURL
@@ -89,7 +89,7 @@ public struct SystemSpotlightStore: SpotlightStore {
         // gathering pass for reasons this deadline alone does not rule out.
         let outcome = await SpotlightRunner.gather(
             predicate: NSPredicate(format: "%K LIKE %@", NSMetadataItemFSNameKey, "*"),
-            scopes: scopes, sortDescriptors: [], offset: 0, limit: 1, deadline: 20.0)
+            scopes: scopes, sortDescriptors: [], offset: 0, limit: 1, deadline: Self.gatheringDeadline)
         if outcome.timedOut { return .timedOut }
         return outcome.total > 0 ? .responding : .empty
     }
@@ -139,15 +139,32 @@ public struct SystemSpotlightStore: SpotlightStore {
         let outcome = await SpotlightRunner.gather(
             predicate: NSCompoundPredicate(andPredicateWithSubpredicates: clauses),
             scopes: query.scopes,
-            sortDescriptors: [
-                NSSortDescriptor(key: NSMetadataItemFSContentChangeDateKey, ascending: false)
-            ],
-            offset: query.offset, limit: query.limit, deadline: 20.0)
+            sortDescriptors: Self.sortDescriptors(for: query.sort),
+            offset: query.offset, limit: query.limit, deadline: Self.gatheringDeadline)
 
-        return SearchPage(results: outcome.rows, total: outcome.total)
+        return SearchPage(results: outcome.rows, total: outcome.total, timedOut: outcome.timedOut)
     }
 
     // MARK: - Helpers
+
+    /// Seconds Spotlight is given to finish gathering. Well inside `ToolStandard.timeLimit`,
+    /// and inside the tool-level deadline, so that a slow volume is reported as partial
+    /// results here rather than as an abandoned call.
+    static let gatheringDeadline: TimeInterval = 20
+
+    /// The path is always the last key, so no two matches tie.
+    static func sortDescriptors(for sort: SearchSort) -> [NSSortDescriptor] {
+        let primary: NSSortDescriptor =
+            switch sort {
+            case .modified:
+                NSSortDescriptor(key: NSMetadataItemFSContentChangeDateKey, ascending: false)
+            case .created:
+                NSSortDescriptor(key: NSMetadataItemFSCreationDateKey, ascending: false)
+            case .name: NSSortDescriptor(key: NSMetadataItemFSNameKey, ascending: true)
+            case .size: NSSortDescriptor(key: NSMetadataItemFSSizeKey, ascending: false)
+            }
+        return [primary, NSSortDescriptor(key: NSMetadataItemPathKey, ascending: true)]
+    }
 
     static func isPermissionError(_ error: Error) -> Bool {
         let nsError = error as NSError

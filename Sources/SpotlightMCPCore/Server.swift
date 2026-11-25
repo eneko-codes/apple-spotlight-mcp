@@ -3,7 +3,7 @@ import Foundation
 public enum SpotlightMCPServer {
 
     public static let name = "apple-spotlight-mcp"
-    public static let version = "1.0.2"
+    public static let version = "2.0.0"
 
     /// Returned from `initialize`. It carries what per-tool descriptions cannot state
     /// once: the allow-list, and the fact that Spotlight and the allow-list are two
@@ -27,8 +27,14 @@ public enum SpotlightMCPServer {
         finds a word inside a PDF, a Pages document or a source file without opening \
         anything. Spotlight answers from its index, though: a file it has not indexed — \
         an excluded volume, a network share, something written seconds ago — is invisible \
-        here however plainly it exists, and every query carries a deadline it reports if \
-        it hits.
+        here however plainly it exists, and every query carries a deadline: if it passes, \
+        the result holds what had arrived and says it is partial.
+
+        spotlight_search returns one page of matches, \(Configuration().searchLimit) by default \
+        and \(Configuration.searchLimitRange.upperBound) at most per page (limit). When more exist the \
+        result says how many and gives the offset for the next page. Matches are ordered by sort \
+        (default: most recently modified first), then by path. Dates are from_date and to_date, \
+        both included.
 
         A path this server returns still has to pass whatever allow-list the tool that \
         opens it enforces — apple-filesystem-mcp for a file's contents, apple-pdf-mcp for \

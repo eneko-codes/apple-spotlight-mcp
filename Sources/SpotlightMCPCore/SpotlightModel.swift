@@ -23,6 +23,21 @@ public struct CanonicalPath: Sendable, Equatable {
 
 /// Every filter mirrors a Spotlight attribute. Nothing here is computed: if the index
 /// does not store it, it is not a filter.
+public enum SearchSort: String, Sendable, Equatable, CaseIterable {
+    case modified, created, name, size
+
+    /// The order is stated to the caller, and every one ends on the path, so that two
+    /// matches never tie and a second page starts exactly where the first ended.
+    public var summary: String {
+        switch self {
+        case .modified: "most recently modified first"
+        case .created: "most recently created first"
+        case .name: "by name, A to Z"
+        case .size: "largest first"
+        }
+    }
+}
+
 public struct SpotlightQuery: Sendable, Equatable {
     public var nameContains: String?
     public var textContains: String?
@@ -31,6 +46,7 @@ public struct SpotlightQuery: Sendable, Equatable {
     /// A UTI matched against `kMDItemContentTypeTree`, so `public.image` finds a PNG.
     public var contentType: String?
     public var modifiedAfter: Date?
+    /// Exclusive: the first instant after the range the caller asked for.
     public var modifiedBefore: Date?
     public var minimumSizeBytes: Int?
     public var maximumSizeBytes: Int?
@@ -39,7 +55,8 @@ public struct SpotlightQuery: Sendable, Equatable {
     /// read roots are substituted when the caller names none, so a query can never
     /// widen to the whole disk.
     public var scopes: [String] = []
-    public var limit: Int = 50
+    public var sort: SearchSort = .modified
+    public var limit: Int = Configuration.defaultSearchLimit
     public var offset: Int = 0
 
     public init() {}
@@ -72,10 +89,14 @@ public struct SearchHit: Sendable, Equatable {
 public struct SearchPage: Sendable, Equatable {
     public let results: [SearchHit]
     public let total: Int
+    /// True when Spotlight had not finished gathering at the deadline: `results` and
+    /// `total` are then only what had arrived, and the answer must say so.
+    public let timedOut: Bool
 
-    public init(results: [SearchHit], total: Int) {
+    public init(results: [SearchHit], total: Int, timedOut: Bool = false) {
         self.results = results
         self.total = total
+        self.timedOut = timedOut
     }
 }
 

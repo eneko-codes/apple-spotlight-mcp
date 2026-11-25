@@ -18,15 +18,25 @@ public struct Configuration: Sendable, Equatable {
     public var readRoots: [String] = []
 
     /// Default page size for `spotlight_search`. The tool's own `limit` still wins.
-    public var searchLimit: Int = 50
+    public var searchLimit: Int = Configuration.defaultSearchLimit
 
     public init() {}
 
-    public static let searchLimitRange = 1...500
+    /// A row is a path (usually under 150 characters) and one line of facts, so a default
+    /// page of this many rows is about `ToolStandard.usualPage` characters, and the most
+    /// a page holds stays well inside `ToolStandard.longestResult`.
+    public static let defaultSearchLimit = 50
+    public static let searchLimitRange = 1...100
+
+    /// Bytes. A terabyte is above any file on this Mac; the bound exists so a size is a
+    /// quantity that is moved and reported like every other, not an unbounded number.
+    public static let sizeRange = 0...1_000_000_000_000
 
     /// Paging ceiling. Declared here so the advertised schema and the enforced clamp
-    /// cannot drift: both read this one value.
-    public static let offsetRange = 0...10_000
+    /// cannot drift: both read this one value. It is far above the number of files an
+    /// index holds, because a lower one would make the matches past it unreachable while
+    /// the next-page notice kept pointing at it.
+    public static let offsetRange = 0...100_000_000
 
     /// True when an argument is an unsubstituted manifest placeholder.
     ///

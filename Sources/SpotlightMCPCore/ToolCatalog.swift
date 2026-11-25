@@ -12,6 +12,14 @@ public enum ToolCatalog {
         [status, search(configuration)]
     }
 
+    /// The names a call may use, read from the schema so the two cannot drift apart.
+    static func argumentNames(of tool: Tool) -> [String] {
+        guard case .object(let schema) = tool.inputSchema,
+            case .object(let properties)? = schema["properties"]
+        else { return [] }
+        return Array(properties.keys)
+    }
+
     // MARK: Schema helpers
 
     private static func object(properties: [String: Value], required: [String] = []) -> Value {
@@ -34,12 +42,14 @@ public enum ToolCatalog {
     }
 
     private static func integer(
-        _ description: String, minimum: Int, maximum: Int, default def: Int
+        _ description: String, minimum: Int, maximum: Int, default def: Int?
     ) -> Value {
-        .object([
+        var schema: [String: Value] = [
             "type": .string("integer"), "description": .string(description),
-            "minimum": .int(minimum), "maximum": .int(maximum), "default": .int(def),
-        ])
+            "minimum": .int(minimum), "maximum": .int(maximum),
+        ]
+        if let def { schema["default"] = .int(def) }
+        return .object(schema)
     }
 
     private static let pathHelp = """
@@ -49,7 +59,7 @@ public enum ToolCatalog {
         """
 
     private static let dateHelp = """
-        Accepts 2026-08-12 (that day, from midnight), 2026-08-12T09:00 (local time), or \
+        Accepts 2026-08-12 (that whole day), 2026-08-12T09:00 (local time), or \
         2026-08-12T09:00:00+02:00 (explicit offset).
         """
 
@@ -78,27 +88,36 @@ public enum ToolCatalog {
     )
 
     static func search(_ configuration: Configuration) -> Tool {
-        Tool(
+        let limits = Configuration.searchLimitRange
+        let sizes = Configuration.sizeRange
+        return Tool(
             name: searchName,
             title: "Search files with Spotlight",
             description: """
-                Asks Spotlight for files matching any combination of: name, TEXT INSIDE THE \
-                FILE, kind, UTI, modification date range, size range and Finder tag — \
-                optionally under one folder. Returns one path per match with size, date and \
-                kind.
+                Returns one page of the files Spotlight matches, most recently modified first: \
+                one path per match with its size, modification time and kind. A page holds \
+                \(configuration.searchLimit) files unless 'limit' (\(limits.lowerBound)–\(limits.upperBound)) says \
+                otherwise. When more matches exist the result says how many and gives the \
+                'offset' that returns the next page; 'sort' changes the order \
+                (modified, created, name or size) and ties are ordered by path, so pages \
+                never overlap. If Spotlight has not finished at its deadline, the result \
+                holds what had arrived and says it is partial: narrow the filters.
+
+                Filters, any combination (at least one is required): 'name_contains', \
+                'text_contains' (TEXT INSIDE THE FILE), 'kind', 'content_type' (a UTI), \
+                'from_date' and 'to_date' (modification time, both inclusive), \
+                'min_size' and 'max_size' (bytes), 'tag' (a Finder tag), and 'folder' to \
+                search under one folder.
 
                 'text_contains' is the reason to use this at all: Spotlight has already \
                 read the contents of every PDF, Pages document, mail message and source \
                 file it indexed, so it finds a word inside them without opening anything. \
-                At least one filter is required.
-
                 Spotlight answers from its index. A file it has not indexed — an excluded \
                 volume, a network share, something written seconds ago — is invisible here \
-                however plainly it exists. Results are capped at \
-                \(configuration.searchLimit) by default.
+                however plainly it exists.
 
-                Sorting by 'modified' descending with no other filter is how you ask for \
-                recent work; there is deliberately no separate "recent files" tool.
+                Sorting by 'modified' with no other filter than a recent 'from_date' is how \
+                you ask for recent work; there is deliberately no separate "recent files" tool.
                 """,
             inputSchema: object(properties: [
                 "name_contains": string("Substring of the file name."),
@@ -115,32 +134,38 @@ public enum ToolCatalog {
                     a HEIC, and "com.adobe.pdf" finds PDFs.
                     """),
                 "tag": string("A Finder tag name, matched exactly."),
-                "modified_after": string("Only files modified at or after this. \(dateHelp)"),
-                "modified_before": string("Only files modified before this. \(dateHelp)"),
+                "from_date": string(
+                    "Only files modified at or after this, included. \(dateHelp)"),
+                "to_date": string(
+                    """
+                    Only files modified up to and including this: a plain day covers the \
+                    whole day. \(dateHelp)
+                    """),
                 "min_size": integer(
-                    "Smallest file size in bytes.", minimum: 0, maximum: 1_000_000_000_000,
-                    default: 0),
+                    "Smallest file size in bytes.", minimum: sizes.lowerBound,
+                    maximum: sizes.upperBound, default: nil),
                 "max_size": integer(
-                    "Largest file size in bytes.", minimum: 0, maximum: 1_000_000_000_000,
-                    default: 1_000_000_000_000),
+                    "Largest file size in bytes.", minimum: sizes.lowerBound,
+                    maximum: sizes.upperBound, default: nil),
                 "folder": string(
                     "Restrict the search to this folder and everything under it. \(pathHelp) "
                         + "Omit to search every configured readable folder."),
                 "sort": .object([
                     "type": .string("string"),
-                    "enum": .array([
-                        .string("modified"), .string("created"), .string("name"), .string("size"),
-                    ]),
-                    "default": .string("modified"),
-                    "description": .string("Field to sort by, always descending except 'name'."),
+                    "enum": .array(SearchSort.allCases.map { .string($0.rawValue) }),
+                    "default": .string(SearchSort.modified.rawValue),
+                    "description": .string(
+                        """
+                        Order of the matches: modified, created and size put the newest or \
+                        largest first; name goes A to Z. Ties are ordered by path.
+                        """),
                 ]),
                 "limit": integer(
-                    "Maximum number of files to return.",
-                    minimum: Configuration.searchLimitRange.lowerBound,
-                    maximum: Configuration.searchLimitRange.upperBound,
+                    "Number of files in the page.",
+                    minimum: limits.lowerBound, maximum: limits.upperBound,
                     default: configuration.searchLimit),
                 "offset": integer(
-                    "Skip this many matches; use it to page.",
+                    "Number of matches to skip; pass the offset the result gives for the next page.",
                     minimum: Configuration.offsetRange.lowerBound,
                     maximum: Configuration.offsetRange.upperBound, default: 0),
             ]),
