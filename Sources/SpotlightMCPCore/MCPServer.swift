@@ -71,10 +71,13 @@ public struct MCPHandler: Sendable {
             guard let toolName = parameters?["name"]?.stringValue else {
                 return Self.encode(error: Failure.invalidParameters, id: id)
             }
+            // Every result leaves through here, so this is where the tool standard's guard
+            // sits: a tool that forgot to bound its result still cannot send one too long.
             let output = await tools.handle(
                 ToolCall(
                     name: toolName, arguments: parameters?["arguments"]?.objectValue,
-                    progressToken: Self.progressToken(parameters)))
+                    progressToken: Self.progressToken(parameters))
+            ).withinTheStandard()
             return Self.encode(
                 result: .object(["content": output.json, "isError": .bool(output.isError)]),
                 id: id)
