@@ -25,7 +25,7 @@ Not affiliated with or endorsed by Apple Inc.
 | Tool | Kind | What it does |
 |---|---|---|
 | `spotlight_status` | read | Reports the read scope, whether macOS is actually letting this process reach it, and whether Spotlight is answering for it. Reads no file contents. |
-| `spotlight_search` | read | Asks Spotlight for files matching name, text inside the file, kind, UTI, date range, size range or Finder tag, optionally under one folder. |
+| `spotlight_search` | read | Asks Spotlight for files matching name, text inside the file, kind, UTI, date range (`from_date`, `to_date`, both included), size range or Finder tag, optionally under one folder. Returns one page of matches, ordered by `sort` (default: most recently modified first); when more exist the result says how many and gives the `offset` of the next page. |
 
 ## Frameworks and APIs
 
@@ -57,8 +57,9 @@ indexed — but a path it returns still has to pass whatever allow-list the tool
 that opens it enforces. Finding a path here never means it is readable elsewhere.
 
 **Spotlight can stall indefinitely** on an unindexed or network volume. Every query
-carries a deadline and reports when it was hit — an empty result and a timed-out query
-are two different answers, and the tool never confuses them.
+carries a deadline and reports when it was hit: the result holds what Spotlight had gathered
+and says it is partial. An empty result and a timed-out query are two different answers,
+and the tool never confuses them.
 
 **A folder Spotlight has not indexed is invisible here however plainly it exists.** An
 excluded volume, a network share, or something written seconds ago will not show up in
@@ -183,12 +184,12 @@ since there is no `user_config` to fill it in for you.
 - **`spotlight_search` only finds what Spotlight has indexed.** An excluded volume, a
   network share, or something written seconds ago is invisible to it however plainly it
   exists.
-- **There is no "recent files" tool**, by design. Sorting by `modified` descending with
-  no other filter is how you ask for recent work instead.
+- **There is no "recent files" tool**, by design. Sorting by `modified` (the default,
+  newest first) with a recent `from_date` is how you ask for recent work instead.
 - **Finding a path here does not make it readable elsewhere.** Spotlight's index and a read
   allow-list are two separate checks.
-- **`sort` is advertised but not honoured.** The tool schema offers `modified`, `created`,
-  `name` and `size`; results always come back by modification date, newest first.
+- **A path is never clipped.** Rows are one path each, so a page holds fewer rows than
+  `limit` when the paths are very long, and the result says where the next page starts.
 
 ## Development
 
@@ -197,10 +198,10 @@ swift build
 swift test
 ```
 
-Tests across two suites — `PathScopeTests` and `CatalogueTests` — all against a modelled
-scope that throws from every method except `canonicalise`, so a scope test that
-accidentally reached a real file or a live Spotlight index fails loudly rather than
-quietly passing. See `CLAUDE.md`, whose first section is the hard rule that makes that
+The tests run against modelled stores with invented paths and never reach a real file or a
+live Spotlight index: the scope tests use a store that throws from every method except
+`canonicalise`, so a scope test that touched real data would fail loudly rather than quietly
+pass; the bounds tests use a store that answers from a list of invented matches. See `CLAUDE.md`, whose first section is the hard rule that makes that
 non-negotiable: no agent working in this repository may touch a file outside it.
 
 Manual verification against real files is the owner's job, by hand, with MCP Inspector.

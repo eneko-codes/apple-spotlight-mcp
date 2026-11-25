@@ -56,38 +56,74 @@ public struct Format: Sendable {
 
     // MARK: Search
 
-    public func searchResults(_ page: SearchPage, query: SpotlightQuery) -> String {
-        var header = "Spotlight: \(page.total) match\(page.total == 1 ? "" : "es")"
-        if page.results.count < page.total {
-            header += ", showing \(query.offset + 1)–\(query.offset + page.results.count)"
-        }
-        header += "\n  scope: " + query.scopes.joined(separator: ", ")
+    /// How many search roots a result names before it counts the rest: the list is the
+    /// person's own configuration and may be long.
+    static let scopesNamed = 5
 
-        guard !page.results.isEmpty else {
-            return header + """
+    /// One page of matches. The notices go first, then the header, then one block per
+    /// match. `page.results` may hold more rows than one result may carry, so the rows
+    /// shown are halved until the text fits and the notice says where the next page starts.
+    public func searchResults(_ page: SearchPage, query: SpotlightQuery, notices: [String])
+        -> String
+    {
+        let named = query.scopes.prefix(Self.scopesNamed).joined(separator: ", ")
+        let scope = named + (query.scopes.count > Self.scopesNamed
+            ? " and \(query.scopes.count - Self.scopesNamed) more" : "")
+        var header =
+            page.timedOut
+            ? "Spotlight: partial results"
+            : "Spotlight: \(page.total) match\(page.total == 1 ? "" : "es")"
+        header += "\n  scope: \(scope)"
+        header += "\n  order: \(query.sort.summary), then by path"
 
-
-                  (no matches)
-
-                  Spotlight answers from its index, so a file it has not indexed is
-                  invisible here however plainly it exists.
-                """
-        }
-
-        let rows = page.results.map { hit -> String in
-            var row = "  " + Self.oneLine(hit.path)
-            var facts = [Self.bytes(hit.sizeBytes)]
-            if let modified = hit.modifiedAt {
-                facts.append(DateParsing.timestamp(modified, calendar: calendar))
+        return ToolStandard.fitting(page.results.count) { size in
+            let shown = Array(page.results.prefix(size))
+            var lines = notices
+            if page.timedOut {
+                lines.append(
+                    Notice.partial(
+                        after: page.total, things: "matches",
+                        narrowBy: "folder, name_contains, kind or another filter"))
             }
-            if let kind = hit.kindDescription { facts.append(kind) }
-            row += "\n      " + facts.joined(separator: " · ")
-            return row
+            // After a deadline the total is only what had arrived, so only "more exist" is
+            // known, and only when this page did not reach the end of it.
+            let position =
+                page.timedOut
+                ? (query.offset + shown.count < page.total
+                    ? Notice.page(offset: query.offset, count: shown.count, total: nil, things: "matches")
+                    : nil)
+                : Notice.page(
+                    offset: query.offset, count: shown.count, total: page.total, things: "matches")
+            if let position { lines.append(position) }
+
+            guard !shown.isEmpty else {
+                guard page.total == 0 else {
+                    return ToolStandard.withNotices(lines, header)
+                }
+                return ToolStandard.withNotices(
+                    lines,
+                    header + """
+
+
+                          (no matches)
+
+                          Spotlight answers from its index, so a file it has not indexed is
+                          invisible here however plainly it exists.
+                        """)
+            }
+            return ToolStandard.withNotices(
+                lines, ([header, ""] + shown.map(row)).joined(separator: "\n"))
         }
-        var text = ([header, ""] + rows).joined(separator: "\n")
-        if page.results.count < page.total {
-            text += "\n\n  \(page.total - query.offset - page.results.count) more — page with 'offset'."
+    }
+
+    private func row(_ hit: SearchHit) -> String {
+        var text = "  " + Self.oneLine(hit.path)
+        var facts = [Self.bytes(hit.sizeBytes)]
+        if let modified = hit.modifiedAt {
+            facts.append(DateParsing.timestamp(modified, calendar: calendar))
         }
+        if let kind = hit.kindDescription { facts.append(Self.oneLine(kind)) }
+        text += "\n      " + facts.joined(separator: " · ")
         return text
     }
 

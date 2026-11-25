@@ -3,13 +3,17 @@ import Foundation
 public struct ParsedDate: Sendable, Equatable {
     public let date: Date
     /// True when the caller wrote only a day. A date-only bound is taken at the start of
-    /// that day, which is what makes `modified_after: 2026-08-12` mean "on or after the
-    /// 12th" rather than "after noon on the 12th".
+    /// that day, which is what makes `from_date: 2026-08-12` mean "on or after the 12th"
+    /// rather than "after noon on the 12th". As `to_date` it covers the whole day.
     public let isDateOnly: Bool
+    /// True when the caller wrote the time down to the minute and no further, so as
+    /// `to_date` it covers that whole minute.
+    public let isMinutePrecision: Bool
 
-    public init(date: Date, isDateOnly: Bool) {
+    public init(date: Date, isDateOnly: Bool, isMinutePrecision: Bool = false) {
         self.date = date
         self.isDateOnly = isDateOnly
+        self.isMinutePrecision = isMinutePrecision
     }
 }
 
@@ -32,17 +36,21 @@ public enum DateParsing {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
 
         if let components = dayComponents(text) {
-            guard let day = calendar.date(from: components) else {
-                throw ToolError.badDate(argument: argument, value: text)
-            }
+            guard let day = calendar.date(from: components),
+                exists(components, [.year, .month, .day], as: day, in: calendar)
+            else { throw ToolError.nonexistentDate(argument: argument, value: text) }
             return ParsedDate(date: calendar.startOfDay(for: day), isDateOnly: true)
         }
 
         if let components = localComponents(text) {
-            guard let moment = calendar.date(from: components) else {
-                throw ToolError.badDate(argument: argument, value: text)
-            }
-            return ParsedDate(date: moment, isDateOnly: false)
+            guard let moment = calendar.date(from: components),
+                exists(
+                    components, [.year, .month, .day, .hour, .minute, .second], as: moment,
+                    in: calendar)
+            else { throw ToolError.nonexistentDate(argument: argument, value: text) }
+            return ParsedDate(
+                date: moment, isDateOnly: false,
+                isMinutePrecision: text.split(separator: "T").last?.split(separator: ":").count == 2)
         }
 
         // Only reached for a string carrying its own offset or Z suffix, where the
@@ -55,11 +63,35 @@ public enum DateParsing {
             let formatter = ISO8601DateFormatter()
             formatter.formatOptions = options
             if let moment = formatter.date(from: text) {
+                // The day is checked apart from the formatter, which is not documented to
+                // refuse a day its month does not have.
+                guard let day = dayComponents(String(text.prefix(10))), dayExists(day) else {
+                    throw ToolError.nonexistentDate(argument: argument, value: text)
+                }
                 return ParsedDate(date: moment, isDateOnly: false)
             }
         }
 
         throw ToolError.badDate(argument: argument, value: text)
+    }
+
+    /// Whether `date` is what `components` asked for. `Calendar.date(from:)` does not refuse
+    /// 30 February or a local time the clocks skip: it rolls forward to a moment that does
+    /// exist, and a filter would quietly cover other days than the ones named.
+    private static func exists(
+        _ components: DateComponents, _ fields: Set<Calendar.Component>, as date: Date,
+        in calendar: Calendar
+    ) -> Bool {
+        let actual = calendar.dateComponents(fields, from: date)
+        return fields.allSatisfy { actual.value(for: $0) == (components.value(for: $0) ?? 0) }
+    }
+
+    /// Whether the proleptic Gregorian calendar has this day at all, in any time zone.
+    private static func dayExists(_ components: DateComponents) -> Bool {
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = TimeZone(secondsFromGMT: 0) ?? gregorian.timeZone
+        guard let day = gregorian.date(from: components) else { return false }
+        return exists(components, [.year, .month, .day], as: day, in: gregorian)
     }
 
     /// `YYYY-MM-DD` and nothing else.
